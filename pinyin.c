@@ -1,3 +1,4 @@
+#include "fcitx_protocol.h"
 #include "native.h"
 #include <ibus.h>
 #include <rime_api.h>
@@ -154,6 +155,19 @@ static RimeSessionId create_session(void) {
     rime->set_option(session, "ascii_mode", input_english);
   return session;
 }
+
+/* The Fcitx frontend runs in a separate process and therefore uses the daemon
+ * as the sole owner of librime. These narrow helpers deliberately share the
+ * existing Rime API, schema and ASCII-mode state with the IBus engine. */
+RimeApi *pinyin_rime_api(void) {
+  return rime_init() ? rime : NULL;
+}
+RimeSessionId pinyin_create_session(void) { return create_session(); }
+int pinyin_ensure_session_schema(RimeSessionId session) {
+  return ensure_session_schema(session);
+}
+int pinyin_input_english(void) { return input_english; }
+void pinyin_set_input_english(int english) { input_english = english ? 1 : 0; }
 static PinyinEngine *find_engine(uint64_t id, uint64_t revision) {
   PinyinEngine *e =
       engines ? g_hash_table_lookup(engines, (gpointer)(uintptr_t)id) : NULL;
@@ -628,6 +642,7 @@ static void property_activate(IBusEngine *engine, const gchar *name,
   }
 }
 void native_pinyin_preferences_changed(void) {
+  fcitx_pinyin_preferences_changed();
   if (!engines)
     return;
   GHashTableIter iterator;
@@ -677,6 +692,8 @@ static void pinyin_engine_init(PinyinEngine *e) {
 uintptr_t native_pinyin_type(void) { return pinyin_engine_get_type(); }
 void native_pinyin_add(uint64_t id, uint64_t revision, const char *text,
                        const char *source, int cloud) {
+  if (fcitx_pinyin_add(id, revision, text, source, cloud))
+    return;
   PinyinEngine *e = find_engine(id, revision);
   if (!e || e->navigated)
     return;
@@ -686,6 +703,8 @@ void native_pinyin_add(uint64_t id, uint64_t revision, const char *text,
   g_ptr_array_add(items, choice(text, source, -1));
 }
 void native_pinyin_refresh(uint64_t id, uint64_t revision) {
+  if (fcitx_pinyin_refresh(id, revision))
+    return;
   PinyinEngine *e = find_engine(id, revision);
   if (e && !e->navigated)
     show_lookup(e);
@@ -723,5 +742,5 @@ char *native_pinyin_schema_status(void) {
       }
     }
   }
-  return g_strdup("");
+  return fcitx_pinyin_schema_status();
 }

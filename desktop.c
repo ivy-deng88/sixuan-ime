@@ -1,3 +1,4 @@
+#include "fcitx_protocol.h"
 #include "native.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -19,6 +20,8 @@ extern void goPosition(int, int);
 #define SPACE_PATH NAME_SPACE
 static IBusBus *bus;
 static IBusFactory *factory;
+static int ibus_ready = 0;
+static int fcitx_delivery = 0;
 static GMainLoop *loop;
 static GDBusConnection *session_bus;
 static GSettings *space_settings;
@@ -108,9 +111,11 @@ static void voice_engine_init(VoiceEngine *e) {
   e->purpose = 0;
 }
 char *native_context(void) {
-  return bus ? ibus_bus_current_input_context(bus) : g_strdup("");
+  return ibus_ready && bus ? ibus_bus_current_input_context(bus) : g_strdup("");
 }
 char *native_engine(void) {
+  if (!ibus_ready)
+    return g_strdup("");
   if (!bus) {
     ibus_init();
     bus = ibus_bus_new();
@@ -122,6 +127,8 @@ char *native_engine(void) {
   return name;
 }
 int native_restore(const char *name) {
+  if (!ibus_ready)
+    return 0;
   if (!bus) {
     ibus_init();
     bus = ibus_bus_new();
@@ -245,6 +252,16 @@ static gboolean expire(gpointer data) {
 int native_begin(uint64_t gen) {
   if (pending)
     return 0;
+  if (native_fcitx_frontend_available()) {
+    fcitx_delivery = 1;
+    pending = 1;
+    selected = ready = final_text = restoring = committed = 0;
+    current_generation = gen;
+    return 1;
+  }
+  fcitx_delivery = 0;
+  if (!ibus_ready)
+    return 0;
   g_free(previous);
   previous = native_engine();
   g_free(target);
@@ -269,6 +286,16 @@ int native_begin(uint64_t gen) {
 void native_text(const char *text, int final) {
   if (!pending || restoring || committed)
     return;
+  if (fcitx_delivery) {
+    int delivered = native_fcitx_deliver_text(current_generation, text, final);
+    if (final) {
+      pending = 0;
+      fcitx_delivery = 0;
+      goDelivered(current_generation, delivered,
+                  delivered ? "" : "当前 Fcitx 5 输入框不可用，结果已保留");
+    }
+    return;
+  }
   g_free(desired);
   desired = g_strdup(text);
   final_text = final;
@@ -280,7 +307,15 @@ void native_text(const char *text, int final) {
     g_timeout_add(3500, expire, g);
   }
 }
-void native_cancel(void) { restore_bridge(0, "已取消输入"); }
+void native_cancel(void) {
+  if (fcitx_delivery) {
+    native_fcitx_cancel_text();
+    fcitx_delivery = 0;
+    pending = 0;
+    return;
+  }
+  restore_bridge(0, "已取消输入");
+}
 static gboolean schema_exists(const char *id) {
   GSettingsSchemaSource *source = g_settings_schema_source_get_default();
   if (!source)
@@ -302,6 +337,8 @@ static gboolean is_gnome_desktop(void) {
   return found;
 }
 void native_space(int enabled) {
+  if (native_fcitx_running())
+    return;
   if (!schema_exists("org.gnome.settings-daemon.plugins.media-keys") ||
       !schema_exists("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding")) {
     static gboolean warned = FALSE;
@@ -424,7 +461,10 @@ static void screen_locked(GDBusConnection *c, const gchar *sender,
   g_variant_get(params, "(b)", &locked);
   goLocked(locked);
 }
-static void disconnected(IBusBus *b, gpointer unused) { native_quit(); }
+static void disconnected(IBusBus *b, gpointer unused) {
+  ibus_ready = 0;
+  active = NULL;
+}
 // Restarting this service drops its engines and IBus silently falls back to
 // another engine while GNOME still shows Sixuan as current; reselect it.
 static void restore_pinyin(void) {
@@ -453,11 +493,19 @@ static const char *xml =
     "direction='out'/></method><method name='Status'><arg type='s' "
     "direction='out'/></method><method name='Last'><arg type='s' "
     "direction='out'/></method><method name='CopyLast'><arg type='s' "
-    "direction='out'/></method></interface></node>";
+    "direction='out'/></method>"
+    "<method name='PinyinKey'><arg type='t' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='s' direction='in'/><arg type='t' direction='out'/><arg type='b' direction='out'/><arg type='b' direction='out'/><arg type='s' direction='out'/><arg type='i' direction='out'/><arg type='i' direction='out'/><arg type='a(ss)' direction='out'/><arg type='s' direction='out'/><arg type='s' direction='out'/></method>"
+    "<method name='PinyinSelect'><arg type='t' direction='in'/><arg type='i' direction='in'/><arg type='t' direction='out'/><arg type='b' direction='out'/><arg type='b' direction='out'/><arg type='s' direction='out'/><arg type='i' direction='out'/><arg type='i' direction='out'/><arg type='a(ss)' direction='out'/><arg type='s' direction='out'/><arg type='s' direction='out'/></method>"
+    "<method name='PinyinState'><arg type='t' direction='in'/><arg type='t' direction='out'/><arg type='b' direction='out'/><arg type='b' direction='out'/><arg type='s' direction='out'/><arg type='i' direction='out'/><arg type='i' direction='out'/><arg type='a(ss)' direction='out'/><arg type='s' direction='out'/><arg type='s' direction='out'/></method>"
+    "<method name='PinyinClose'><arg type='t' direction='in'/><arg type='b' direction='out'/></method>"
+    "<method name='GestureKey'><arg type='i' direction='in'/><arg type='i' direction='in'/><arg type='b' direction='out'/></method>"
+    "</interface></node>";
 static void command_call(GDBusConnection *connection, const gchar *sender,
                          const gchar *path, const gchar *iface,
                          const gchar *method, GVariant *params,
                          GDBusMethodInvocation *invocation, gpointer unused) {
+  if (native_fcitx_command_call(method, params, invocation))
+    return;
   char *result = goCommand((char *)method);
   g_dbus_method_invocation_return_value(invocation,
                                         g_variant_new("(s)", result));
@@ -480,47 +528,58 @@ void native_quit(void) {
 int native_init(int keys) {
   g_setenv("GDK_BACKEND", "x11", TRUE);
   g_setenv("GTK_IM_MODULE", "gtk-im-context-simple", TRUE);
-  ibus_init();
-  if (!bus)
-    bus = ibus_bus_new();
-  if (!ibus_bus_is_connected(bus))
-    return 0;
-  factory = ibus_factory_new(ibus_bus_get_connection(bus));
-  ibus_factory_add_engine(factory, ENGINE, voice_engine_get_type());
-  ibus_factory_add_engine(factory, NAME_PINYIN,
-                          native_pinyin_type());
-  IBusComponent *component = ibus_component_new(
-      NAME_COMPONENT, "思玄语音输入", NAME_VERSION,
-      NAME_LICENSE, "Sixuan", "", "", "");
-  IBusEngineDesc *engine = ibus_engine_desc_new(
-      ENGINE, "思玄语音", "Go 原生语音输入", "zh", NAME_LICENSE, "Sixuan",
-      "audio-input-microphone", "default");
-  ibus_component_add_engine(component, engine);
-  char *cli =
-      goPublicBuild() ? g_strdup("/usr/bin/sixuan-ime") : g_build_filename(g_get_home_dir(), ".local", "bin", NAME_CLI, NULL);
-  char *quoted = g_shell_quote(cli),
-       *setup = g_strdup_printf("%s settings", quoted);
-  ibus_component_add_engine(
-      component,
-      ibus_engine_desc_new_varargs(
-          "name", NAME_PINYIN, "longname", NAME_PINYIN_TITLE,
-          "description", NAME_PINYIN_DESCRIPTION, "language", "zh",
-          "license", NAME_LICENSE, "author", "Sixuan", "icon", "input-keyboard",
-          "layout", "default", "setup", setup, NULL));
-  g_free(cli);
-  g_free(quoted);
-  g_free(setup);
-  if (!ibus_bus_register_component(bus, component))
-    return 0;
-  g_object_unref(component);
-  restore_pinyin();
-  g_signal_connect(bus, "disconnected", G_CALLBACK(disconnected), NULL);
+
+  /* IBus is optional. In particular, Fcitx's IBus frontend owns the same
+   * bus name but is not an IBus daemon that can host engines. Never make the
+   * whole service fail merely because IBus is absent. */
+  if (!native_fcitx_running()) {
+    ibus_init();
+    if (!bus)
+      bus = ibus_bus_new();
+    if (bus && ibus_bus_is_connected(bus)) {
+      factory = ibus_factory_new(ibus_bus_get_connection(bus));
+      ibus_factory_add_engine(factory, ENGINE, voice_engine_get_type());
+      ibus_factory_add_engine(factory, NAME_PINYIN, native_pinyin_type());
+      IBusComponent *component = ibus_component_new(
+          NAME_COMPONENT, "思玄语音输入", NAME_VERSION, NAME_LICENSE, "Sixuan",
+          "", "", "");
+      IBusEngineDesc *engine = ibus_engine_desc_new(
+          ENGINE, "思玄语音", "Go 原生语音输入", "zh", NAME_LICENSE, "Sixuan",
+          "audio-input-microphone", "default");
+      ibus_component_add_engine(component, engine);
+      char *cli = goPublicBuild()
+                      ? g_strdup("/usr/bin/sixuan-ime")
+                      : g_build_filename(g_get_home_dir(), ".local", "bin",
+                                         NAME_CLI, NULL);
+      char *quoted = g_shell_quote(cli),
+           *setup = g_strdup_printf("%s settings", quoted);
+      ibus_component_add_engine(
+          component,
+          ibus_engine_desc_new_varargs(
+              "name", NAME_PINYIN, "longname", NAME_PINYIN_TITLE,
+              "description", NAME_PINYIN_DESCRIPTION, "language", "zh",
+              "license", NAME_LICENSE, "author", "Sixuan", "icon",
+              "input-keyboard", "layout", "default", "setup", setup, NULL));
+      g_free(cli);
+      g_free(quoted);
+      g_free(setup);
+      ibus_ready = ibus_bus_register_component(bus, component);
+      g_object_unref(component);
+      if (ibus_ready) {
+        restore_pinyin();
+        g_signal_connect(bus, "disconnected", G_CALLBACK(disconnected), NULL);
+      }
+    }
+  }
+
   session_bus = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
   if (!session_bus)
     return 0;
   char *bus_xml = g_strdup_printf(xml, NAME_BUS);
   GDBusNodeInfo *info = g_dbus_node_info_new_for_xml(bus_xml, NULL);
   g_free(bus_xml);
+  if (!info)
+    return 0;
   g_dbus_connection_register_object(session_bus, NAME_OBJECT,
                                     info->interfaces[0], &commands, NULL, NULL,
                                     NULL);
@@ -613,6 +672,8 @@ void native_notify(const char *title, const char *body) {
 }
 
 void native_enable_pinyin(int select) {
+  if (!ibus_ready)
+    return;
   if (is_gnome_desktop() && schema_exists("org.gnome.desktop.input-sources")) {
     GSettings *settings = g_settings_new("org.gnome.desktop.input-sources");
     GVariant *existing = g_settings_get_value(settings, "sources");

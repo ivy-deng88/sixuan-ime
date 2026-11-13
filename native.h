@@ -36,6 +36,9 @@ void native_pinyin_preferences_changed(void);
 void native_theme_set(const char *, const char *, const char *);
 void native_settings_show(void);
 void native_settings_refresh(void);
+int native_fcitx_running(void);
+int native_fcitx_frontend_available(void);
+char *native_fcitx_register(void);
 
 extern int goPublicBuild(void);
 extern char *goBuildName(int);

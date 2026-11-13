@@ -504,6 +504,9 @@ func goDelivered(gen C.uint64_t, success C.int, reason *C.char) {
 	app.stopIdle = time.Since(stoppedAt).Seconds()
 	if success != 0 {
 		app.delivery = "ibus"
+		if C.native_fcitx_frontend_available() != 0 {
+			app.delivery = "fcitx5"
+		}
 		app.err = ""
 		notify("已输入", "语音文字已提交到输入框")
 	} else {
@@ -534,6 +537,9 @@ func goPosition(x, y C.int) {
 	atomicJSON(filepath.Join(stateHome(), stateDirName+"/indicator-position.json"), map[string]int{"x": int(x), "y": int(y)})
 }
 func restoreInput() {
+	if C.native_fcitx_running() != 0 {
+		return
+	}
 	p := filepath.Join(stateHome(), stateDirName+"/input-method.json")
 	b, _ := os.ReadFile(p)
 	var saved struct{ Engine string }
