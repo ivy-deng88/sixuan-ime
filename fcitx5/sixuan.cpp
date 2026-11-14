@@ -25,7 +25,7 @@
 
 FCITX_DEFINE_LOG_CATEGORY(sixuan_log, "sixuan");
 #define SX_DEBUG() FCITX_LOGC(sixuan_log, Debug)
-#define SX_WARN() FCITX_LOGC(sixuan_log, Warning)
+#define SX_WARN() FCITX_LOGC(sixuan_log, Warn)
 
 namespace {
 
@@ -145,6 +145,8 @@ private:
     std::unordered_map<fcitx::InputContext *, std::unique_ptr<SessionState>>
         states_;
     fcitx::InputContext *active_ = nullptr;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>
+        destroyHandler_;
 };
 
 const char *frontendXml =
@@ -192,24 +194,24 @@ bool sensitive(fcitx::InputContext *ic) {
 }
 
 bool isCtrl(fcitx::KeySym sym) {
-    return sym == fcitx::FcitxKey_Control_L ||
-           sym == fcitx::FcitxKey_Control_R;
+    return sym == FcitxKey_Control_L ||
+           sym == FcitxKey_Control_R;
 }
 
 bool isPrintableControl(fcitx::KeySym sym) {
     switch (sym) {
-    case fcitx::FcitxKey_BackSpace:
-    case fcitx::FcitxKey_Delete:
-    case fcitx::FcitxKey_Return:
-    case fcitx::FcitxKey_KP_Enter:
-    case fcitx::FcitxKey_Up:
-    case fcitx::FcitxKey_Down:
-    case fcitx::FcitxKey_Page_Up:
-    case fcitx::FcitxKey_Page_Down:
-    case fcitx::FcitxKey_Escape:
-    case fcitx::FcitxKey_space:
-    case fcitx::FcitxKey_Shift_L:
-    case fcitx::FcitxKey_Shift_R:
+    case FcitxKey_BackSpace:
+    case FcitxKey_Delete:
+    case FcitxKey_Return:
+    case FcitxKey_KP_Enter:
+    case FcitxKey_Up:
+    case FcitxKey_Down:
+    case FcitxKey_Page_Up:
+    case FcitxKey_Page_Down:
+    case FcitxKey_Escape:
+    case FcitxKey_space:
+    case FcitxKey_Shift_L:
+    case FcitxKey_Shift_R:
         return true;
     default:
         return false;
@@ -238,11 +240,27 @@ SixuanEngine::SixuanEngine(fcitx::Instance *instance) : instance_(instance) {
         g_clear_error(&error);
         ownerId_ = g_bus_own_name_on_connection(
             bus_, kFrontendService, G_BUS_NAME_OWNER_FLAGS_NONE, nullptr,
-            nullptr, nullptr, this);
+            nullptr, this, nullptr);
     }
+    // Sessions are keyed by InputContext pointer; clean up daemon-side state
+    // when the context itself is destroyed.
+    destroyHandler_ = instance_->watchEvent(
+        fcitx::EventType::InputContextDestroyed,
+        fcitx::EventWatcherPhase::Default, [this](fcitx::Event &event) {
+            auto *ic =
+                static_cast<fcitx::InputContextEvent &>(event).inputContext();
+            auto iter = states_.find(ic);
+            if (iter != states_.end()) {
+                closeSession(*iter->second);
+                states_.erase(iter);
+            }
+            if (active_ == ic)
+                active_ = nullptr;
+        });
 }
 
 SixuanEngine::~SixuanEngine() {
+    destroyHandler_.reset();
     for (auto &pair : states_)
         closeSession(*pair.second);
     states_.clear();
@@ -282,7 +300,7 @@ GVariant *SixuanEngine::call(const char *method, GVariant *params,
 
 void SixuanEngine::activate(const fcitx::InputMethodEntry & /*entry*/,
                             fcitx::InputContextEvent &event) {
-    active_ = event.context();
+    active_ = event.inputContext();
     stateFor(active_);
 }
 
@@ -298,7 +316,7 @@ void SixuanEngine::closeSession(SessionState &state) {
 
 void SixuanEngine::deactivate(const fcitx::InputMethodEntry & /*entry*/,
                               fcitx::InputContextEvent &event) {
-    auto *ic = event.context();
+    auto *ic = event.inputContext();
     auto iter = states_.find(ic);
     if (iter != states_.end()) {
         closeSession(*iter->second);
@@ -315,7 +333,7 @@ void SixuanEngine::deactivate(const fcitx::InputMethodEntry & /*entry*/,
 
 void SixuanEngine::reset(const fcitx::InputMethodEntry & /*entry*/,
                          fcitx::InputContextEvent &event) {
-    auto *ic = event.context();
+    auto *ic = event.inputContext();
     auto iter = states_.find(ic);
     if (iter != states_.end()) {
         closeSession(*iter->second);
@@ -415,11 +433,11 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
         }
         list->setPageSize(9);
         list->setSelectionKey(
-            {fcitx::Key(fcitx::FcitxKey_1), fcitx::Key(fcitx::FcitxKey_2),
-             fcitx::Key(fcitx::FcitxKey_3), fcitx::Key(fcitx::FcitxKey_4),
-             fcitx::Key(fcitx::FcitxKey_5), fcitx::Key(fcitx::FcitxKey_6),
-             fcitx::Key(fcitx::FcitxKey_7), fcitx::Key(fcitx::FcitxKey_8),
-             fcitx::Key(fcitx::FcitxKey_9)});
+            {fcitx::Key(FcitxKey_1), fcitx::Key(FcitxKey_2),
+             fcitx::Key(FcitxKey_3), fcitx::Key(FcitxKey_4),
+             fcitx::Key(FcitxKey_5), fcitx::Key(FcitxKey_6),
+             fcitx::Key(FcitxKey_7), fcitx::Key(FcitxKey_8),
+             fcitx::Key(FcitxKey_9)});
         list->setGlobalCursorIndex(state.cursor);
         panel.setCandidateList(std::move(list));
     } else {
@@ -432,7 +450,7 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
 
 void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
                             fcitx::KeyEvent &event) {
-    auto *ic = event.context();
+    auto *ic = event.inputContext();
     active_ = ic;
     if (sensitive(ic))
         return;
@@ -445,12 +463,12 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
         !state->preedit.empty() || !state->candidates.empty();
 
     if (isCtrl(sym)) {
-        int code = sym == fcitx::FcitxKey_Control_L ? 29 : 97;
+        int code = sym == FcitxKey_Control_L ? 29 : 97;
         gesture(code, release ? 0 : 1);
         return;
     }
 
-    if (!release && sym == fcitx::FcitxKey_Escape) {
+    if (!release && sym == FcitxKey_Escape) {
         if (gesture(1, 1)) {
             event.filterAndAccept();
             return;
@@ -464,7 +482,7 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
         return;
     }
 
-    if (!release && sym == fcitx::FcitxKey_space) {
+    if (!release && sym == FcitxKey_space) {
         if (gesture(57, 1)) {
             event.filterAndAccept();
             return;
@@ -478,7 +496,7 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
         return;
     }
 
-    if (sym == fcitx::FcitxKey_Shift_L || sym == fcitx::FcitxKey_Shift_R) {
+    if (sym == FcitxKey_Shift_L || sym == FcitxKey_Shift_R) {
         bool handled = false;
         if (pinyinKey(ic, *state, sym, stateMask, "", &handled) && handled)
             event.filterAndAccept();
@@ -495,7 +513,7 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
     const bool wordDelete =
         hasComposition &&
         event.rawKey().states().test(fcitx::KeyState::Ctrl) &&
-        (sym == fcitx::FcitxKey_BackSpace || sym == fcitx::FcitxKey_Delete);
+        (sym == FcitxKey_BackSpace || sym == FcitxKey_Delete);
     if (chord && !wordDelete)
         return;
 
@@ -503,7 +521,7 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
         fcitx::Key::keySymToUTF8(event.key().sym()).empty())
         return;
     if (hasComposition && !isPrintableControl(sym) &&
-        !(sym >= fcitx::FcitxKey_1 && sym <= fcitx::FcitxKey_9) &&
+        !(sym >= FcitxKey_1 && sym <= FcitxKey_9) &&
         fcitx::Key::keySymToUTF8(event.key().sym()).empty())
         return;
 
