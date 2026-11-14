@@ -35,7 +35,7 @@ constexpr const char *kDaemonInterface = "dev.sixuan.IME";
 constexpr const char *kFrontendService = "dev.sixuan.Fcitx5";
 constexpr const char *kFrontendPath = "/dev/sixuan/Fcitx5";
 constexpr const char *kFrontendInterface = "dev.sixuan.Fcitx5";
-constexpr const char *kStateSignature = "(tbbsiia(ss)ss)";
+constexpr const char *kStateSignature = "(ttbbsiia(ss)ss)";
 
 constexpr guint32 kShiftMask = 1u << 0;
 constexpr guint32 kLockMask = 1u << 1;
@@ -49,20 +49,9 @@ struct Candidate {
     std::string source;
 };
 
-struct Snapshot {
-    uint64_t session = 0;
-    bool handled = false;
-    bool english = false;
-    std::string preedit;
-    int32_t caret = 0;
-    int32_t cursor = 0;
-    std::vector<Candidate> candidates;
-    std::string raw;
-    std::string commit;
-};
-
 struct SessionState {
     uint64_t session = 0;
+    uint64_t revision = 0;
     std::string preedit;
     std::string raw;
     int32_t caret = 0;
@@ -348,16 +337,17 @@ bool SixuanEngine::pinyinKey(fcitx::InputContext *ic, SessionState &state,
 
 bool SixuanEngine::applySnapshot(fcitx::InputContext *ic, SessionState &state,
                                  GVariant *reply, bool /*checkSequence*/) {
-    guint64 session = 0;
+    guint64 session = 0, revision = 0;
     gboolean handled = FALSE, english = FALSE;
     const char *preedit = nullptr, *raw = nullptr, *commit = nullptr;
     gint32 caret = 0, cursor = 0;
     GVariant *array = nullptr;
-    g_variant_get(reply, kStateSignature, &session, &handled, &english,
-                  &preedit, &caret, &cursor, &array, &raw, &commit);
+    g_variant_get(reply, kStateSignature, &session, &revision, &handled,
+                  &english, &preedit, &caret, &cursor, &array, &raw, &commit);
 
     if (session != 0)
         state.session = session;
+    state.revision = revision;
     state.english = english;
     state.preedit = preedit ? preedit : "";
     state.caret = caret;
@@ -397,7 +387,7 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
         auto list = std::make_unique<fcitx::CommonCandidateList>();
         for (size_t i = 0; i < state.candidates.size(); i++) {
             list->append<SixuanCandidateWord>(
-                this, ic, state.session, 0, static_cast<int>(i),
+                this, ic, state.session, state.revision, static_cast<int>(i),
                 state.candidates[i]);
         }
         list->setPageSize(9);
@@ -487,11 +477,11 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
 }
 
 void SixuanEngine::selectCandidate(fcitx::InputContext *ic, uint64_t session,
-                                   uint64_t /*revision*/, int index) {
+                                   uint64_t revision, int index) {
     if (!session)
         return;
     GVariant *reply =
-        call("PinyinSelect", g_variant_new("(ti)", session, index),
+        call("PinyinSelect", g_variant_new("(tti)", session, revision, index),
              kStateSignature);
     if (!reply)
         return;
@@ -528,13 +518,14 @@ void SixuanEngine::handleFrontendCall(GDBusConnection *, const gchar *,
                                       gpointer userData) {
     auto *engine = static_cast<SixuanEngine *>(userData);
     if (!strcmp(method, "RefreshCandidates")) {
-        guint64 session = 0;
+        guint64 session = 0, revision = 0;
         gboolean handled = FALSE, english = FALSE;
         const char *preedit = nullptr, *raw = nullptr, *commit = nullptr;
         gint32 caret = 0, cursor = 0;
         GVariant *array = nullptr;
-        g_variant_get(params, kStateSignature, &session, &handled, &english,
-                      &preedit, &caret, &cursor, &array, &raw, &commit);
+        g_variant_get(params, kStateSignature, &session, &revision, &handled,
+                      &english, &preedit, &caret, &cursor, &array, &raw,
+                      &commit);
         GVariantBuilder builder;
         g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
         for (gsize i = 0; i < g_variant_n_children(array); i++) {
@@ -553,7 +544,7 @@ void SixuanEngine::handleFrontendCall(GDBusConnection *, const gchar *,
             auto *ic = pair.first;
             if (ic->hasFocus() && !sensitive(ic)) {
                 GVariant *stateReply = g_variant_new(
-                    kStateSignature, session, handled, english,
+                    kStateSignature, session, revision, handled, english,
                     preedit ? preedit : "", caret, cursor,
                     g_variant_builder_end(&builder), raw ? raw : "",
                     commit ? commit : "");

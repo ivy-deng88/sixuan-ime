@@ -415,7 +415,8 @@ static GVariant *state_variant(FcitxPinyin *s, int handled) {
     }
   }
   return g_variant_new(SIXUAN_FCITX_STATE_TYPE,
-                       s ? s->id : (guint64)0, handled ? TRUE : FALSE,
+                       s ? s->id : (guint64)0,
+                       s ? s->revision : (guint64)0, handled ? TRUE : FALSE,
                        s && pinyin_input_english() ? TRUE : FALSE,
                        s && s->preedit ? s->preedit : "",
                        s ? s->caret : 0, s ? s->cursor : 0,
@@ -437,12 +438,17 @@ GVariant *fcitx_pinyin_key(uint64_t id, uint32_t keyval, uint32_t state,
   return state_variant(s, handled);
 }
 
-GVariant *fcitx_pinyin_select(uint64_t id, int index) {
+GVariant *fcitx_pinyin_select(uint64_t id, uint64_t revision, int index) {
   FcitxPinyin *s = find(id, 0);
   if (!s)
     return state_variant(NULL, FALSE);
   g_free(s->commit);
   s->commit = g_strdup("");
+  if (revision != s->revision) {
+    /* Stale click: the composition moved on after the candidate list was
+     * rendered. Refuse the selection and let the addon refresh its UI. */
+    return state_variant(s, TRUE);
+  }
   choose(s, index);
   return state_variant(s, TRUE);
 }

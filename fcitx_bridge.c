@@ -180,13 +180,13 @@ static GVariant *call_frontend(const char *method, GVariant *params,
 static GVariant *copy_state(GVariant *state) {
   if (!state)
     return NULL;
-  guint64 session = 0;
+  guint64 session = 0, revision = 0;
   gboolean handled = FALSE, english = FALSE;
   const char *preedit = NULL, *raw = NULL, *commit = NULL;
   gint32 caret = 0, cursor = 0;
   GVariant *array = NULL;
-  g_variant_get(state, SIXUAN_FCITX_STATE_TYPE, &session, &handled, &english,
-                &preedit, &caret, &cursor, &array, &raw, &commit);
+  g_variant_get(state, SIXUAN_FCITX_STATE_TYPE, &session, &revision, &handled,
+                &english, &preedit, &caret, &cursor, &array, &raw, &commit);
   GVariantBuilder candidates;
   g_variant_builder_init(&candidates, G_VARIANT_TYPE("a(ss)"));
   for (gsize i = 0; i < g_variant_n_children(array); i++) {
@@ -198,8 +198,8 @@ static GVariant *copy_state(GVariant *state) {
     g_variant_unref(item);
   }
   g_variant_unref(array);
-  return g_variant_new(SIXUAN_FCITX_STATE_TYPE, session, handled, english,
-                       preedit ? preedit : "", caret, cursor,
+  return g_variant_new(SIXUAN_FCITX_STATE_TYPE, session, revision, handled,
+                       english, preedit ? preedit : "", caret, cursor,
                        g_variant_builder_end(&candidates), raw ? raw : "",
                        commit ? commit : "");
 }
@@ -218,8 +218,8 @@ void native_fcitx_publish_state(GVariant *state) {
 static void return_state(GDBusMethodInvocation *invocation, GVariant *state) {
   GVariant *tuple = copy_state(state);
   if (!tuple)
-    tuple = g_variant_new(SIXUAN_FCITX_STATE_TYPE, (guint64)0, FALSE, FALSE,
-                          "", 0, 0,
+    tuple = g_variant_new(SIXUAN_FCITX_STATE_TYPE, (guint64)0, (guint64)0,
+                          FALSE, FALSE, "", 0, 0,
                           g_variant_new_array(G_VARIANT_TYPE("(ss)"), NULL, 0),
                           "", "");
   g_dbus_method_invocation_return_value(invocation, tuple);
@@ -238,10 +238,10 @@ int native_fcitx_command_call(const char *method, GVariant *params,
     return TRUE;
   }
   if (!strcmp(method, "PinyinSelect")) {
-    guint64 session;
+    guint64 session, revision;
     gint32 index;
-    g_variant_get(params, "(ti)", &session, &index);
-    GVariant *result = fcitx_pinyin_select(session, index);
+    g_variant_get(params, "(tti)", &session, &revision, &index);
+    GVariant *result = fcitx_pinyin_select(session, revision, index);
     return_state(invocation, result);
     g_variant_unref(g_variant_ref_sink(result));
     return TRUE;
