@@ -3,8 +3,6 @@
 #include <glib.h>
 #include <string.h>
 
-extern int goFcitxGesture(int, int);
-
 static GDBusConnection *session_bus(void) {
   static GDBusConnection *connection;
   if (!connection) {
@@ -179,25 +177,6 @@ static GVariant *call_frontend(const char *method, GVariant *params,
   return reply;
 }
 
-int native_fcitx_deliver_text(uint64_t generation, const char *text, int final) {
-  (void)generation;
-  GVariant *reply = call_frontend(
-      "DeliverText",
-      g_variant_new("(sb)", text ? text : "", final ? TRUE : FALSE), "(b)");
-  if (!reply)
-    return FALSE;
-  gboolean delivered = FALSE;
-  g_variant_get(reply, "(b)", &delivered);
-  g_variant_unref(reply);
-  return delivered;
-}
-
-void native_fcitx_cancel_text(void) {
-  GVariant *reply = call_frontend("CancelText", NULL, NULL);
-  if (reply)
-    g_variant_unref(reply);
-}
-
 static GVariant *copy_state(GVariant *state) {
   if (!state)
     return NULL;
@@ -280,13 +259,6 @@ int native_fcitx_command_call(const char *method, GVariant *params,
     g_variant_get(params, "(t)", &session);
     g_dbus_method_invocation_return_value(
         invocation, g_variant_new("(b)", fcitx_pinyin_close(session)));
-    return TRUE;
-  }
-  if (!strcmp(method, "GestureKey")) {
-    gint32 code, value;
-    g_variant_get(params, "(ii)", &code, &value);
-    g_dbus_method_invocation_return_value(
-        invocation, g_variant_new("(b)", goFcitxGesture(code, value)));
     return TRUE;
   }
   return FALSE;

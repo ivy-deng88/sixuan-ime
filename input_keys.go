@@ -15,18 +15,6 @@ func goInputKey(code, value C.int) C.int {
 	if !publicBuild || app == nil || app.locked || !app.config.HoldCtrl {
 		return 0
 	}
-	return inputGesture("ibus", int(code), int(value))
-}
-
-//export goFcitxGesture
-func goFcitxGesture(code, value C.int) C.int {
-	if app == nil || app.locked || !app.config.HoldCtrl {
-		return 0
-	}
-	return inputGesture("fcitx5", int(code), int(value))
-}
-
-func inputGesture(device string, code, value int) C.int {
 	if value == 1 && app.phase != "idle" {
 		if code == 1 {
 			app.action("cancel")
@@ -37,6 +25,6 @@ func inputGesture(device string, code, value int) C.int {
 			return 1
 		}
 	}
-	inputKeyHandler(device, code, value)
+	inputKeyHandler("ibus", int(code), int(value))
 	return 0
 }

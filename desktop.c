@@ -21,7 +21,6 @@ extern void goPosition(int, int);
 static IBusBus *bus;
 static IBusFactory *factory;
 static int ibus_ready = 0;
-static int fcitx_delivery = 0;
 static GMainLoop *loop;
 static GDBusConnection *session_bus;
 static GSettings *space_settings;
@@ -252,14 +251,6 @@ static gboolean expire(gpointer data) {
 int native_begin(uint64_t gen) {
   if (pending)
     return 0;
-  if (native_fcitx_frontend_available()) {
-    fcitx_delivery = 1;
-    pending = 1;
-    selected = ready = final_text = restoring = committed = 0;
-    current_generation = gen;
-    return 1;
-  }
-  fcitx_delivery = 0;
   if (!ibus_ready)
     return 0;
   g_free(previous);
@@ -286,16 +277,6 @@ int native_begin(uint64_t gen) {
 void native_text(const char *text, int final) {
   if (!pending || restoring || committed)
     return;
-  if (fcitx_delivery) {
-    int delivered = native_fcitx_deliver_text(current_generation, text, final);
-    if (final) {
-      pending = 0;
-      fcitx_delivery = 0;
-      goDelivered(current_generation, delivered,
-                  delivered ? "" : "当前 Fcitx 5 输入框不可用，结果已保留");
-    }
-    return;
-  }
   g_free(desired);
   desired = g_strdup(text);
   final_text = final;
@@ -307,15 +288,7 @@ void native_text(const char *text, int final) {
     g_timeout_add(3500, expire, g);
   }
 }
-void native_cancel(void) {
-  if (fcitx_delivery) {
-    native_fcitx_cancel_text();
-    fcitx_delivery = 0;
-    pending = 0;
-    return;
-  }
-  restore_bridge(0, "已取消输入");
-}
+void native_cancel(void) { restore_bridge(0, "已取消输入"); }
 static gboolean schema_exists(const char *id) {
   GSettingsSchemaSource *source = g_settings_schema_source_get_default();
   if (!source)
@@ -498,7 +471,6 @@ static const char *xml =
     "<method name='PinyinSelect'><arg type='t' direction='in'/><arg type='i' direction='in'/><arg type='t' direction='out'/><arg type='b' direction='out'/><arg type='b' direction='out'/><arg type='s' direction='out'/><arg type='i' direction='out'/><arg type='i' direction='out'/><arg type='a(ss)' direction='out'/><arg type='s' direction='out'/><arg type='s' direction='out'/></method>"
     "<method name='PinyinState'><arg type='t' direction='in'/><arg type='t' direction='out'/><arg type='b' direction='out'/><arg type='b' direction='out'/><arg type='s' direction='out'/><arg type='i' direction='out'/><arg type='i' direction='out'/><arg type='a(ss)' direction='out'/><arg type='s' direction='out'/><arg type='s' direction='out'/></method>"
     "<method name='PinyinClose'><arg type='t' direction='in'/><arg type='b' direction='out'/></method>"
-    "<method name='GestureKey'><arg type='i' direction='in'/><arg type='i' direction='in'/><arg type='b' direction='out'/></method>"
     "</interface></node>";
 static void command_call(GDBusConnection *connection, const gchar *sender,
                          const gchar *path, const gchar *iface,

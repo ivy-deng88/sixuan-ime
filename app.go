@@ -504,9 +504,6 @@ func goDelivered(gen C.uint64_t, success C.int, reason *C.char) {
 	app.stopIdle = time.Since(stoppedAt).Seconds()
 	if success != 0 {
 		app.delivery = "ibus"
-		if C.native_fcitx_frontend_available() != 0 {
-			app.delivery = "fcitx5"
-		}
 		app.err = ""
 		notify("已输入", "语音文字已提交到输入框")
 	} else {

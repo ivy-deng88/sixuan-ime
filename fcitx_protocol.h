@@ -33,7 +33,5 @@ int native_fcitx_command_call(const char *method, GVariant *params,
 int native_fcitx_running(void);
 int native_fcitx_frontend_available(void);
 char *native_fcitx_register(void);
-int native_fcitx_deliver_text(uint64_t generation, const char *text, int final);
-void native_fcitx_cancel_text(void);
 
 #endif

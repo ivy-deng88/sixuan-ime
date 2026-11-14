@@ -69,7 +69,6 @@ struct SessionState {
     int32_t cursor = 0;
     bool english = false;
     std::vector<Candidate> candidates;
-    std::string voice;
 };
 
 class SixuanEngine;
@@ -129,9 +128,7 @@ private:
     bool pinyinKey(fcitx::InputContext *ic, SessionState &state,
                    guint32 keyval, guint32 rimeState, const std::string &text,
                    bool *handled);
-    bool gesture(int code, int value);
     void closeSession(SessionState &state);
-    fcitx::InputContext *targetContext();
 
     static void handleFrontendCall(GDBusConnection *, const gchar *,
                                    const gchar *, const gchar *,
@@ -152,10 +149,6 @@ private:
 const char *frontendXml =
     "<node>"
     "<interface name='dev.sixuan.Fcitx5'>"
-    "<method name='DeliverText'>"
-    "<arg type='s' direction='in'/><arg type='b' direction='in'/>"
-    "<arg type='b' direction='out'/>"
-    "</method>"
     "<method name='RefreshCandidates'>"
     "<arg type='t' direction='in'/><arg type='b' direction='in'/>"
     "<arg type='b' direction='in'/><arg type='s' direction='in'/>"
@@ -163,7 +156,6 @@ const char *frontendXml =
     "<arg type='a(ss)' direction='in'/><arg type='s' direction='in'/>"
     "<arg type='s' direction='in'/>"
     "</method>"
-    "<method name='CancelText'/>"
     "</interface>"
     "</node>";
 
@@ -191,11 +183,6 @@ bool sensitive(fcitx::InputContext *ic) {
         fcitx::CapabilityFlags{fcitx::CapabilityFlag::Password,
                                fcitx::CapabilityFlag::Sensitive,
                                fcitx::CapabilityFlag::Disable});
-}
-
-bool isCtrl(fcitx::KeySym sym) {
-    return sym == FcitxKey_Control_L ||
-           sym == FcitxKey_Control_R;
 }
 
 bool isPrintableControl(fcitx::KeySym sym) {
@@ -320,7 +307,6 @@ void SixuanEngine::deactivate(const fcitx::InputMethodEntry & /*entry*/,
     auto iter = states_.find(ic);
     if (iter != states_.end()) {
         closeSession(*iter->second);
-        iter->second->voice.clear();
         iter->second->preedit.clear();
         iter->second->candidates.clear();
     }
@@ -339,22 +325,10 @@ void SixuanEngine::reset(const fcitx::InputMethodEntry & /*entry*/,
         closeSession(*iter->second);
         iter->second->preedit.clear();
         iter->second->candidates.clear();
-        iter->second->voice.clear();
     }
     ic->inputPanel().reset();
     ic->updatePreedit();
     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-}
-
-bool SixuanEngine::gesture(int code, int value) {
-    GVariant *reply =
-        call("GestureKey", g_variant_new("(ii)", code, value), "(b)", 500);
-    if (!reply)
-        return false;
-    gboolean handled = FALSE;
-    g_variant_get(reply, "(b)", &handled);
-    g_variant_unref(reply);
-    return handled;
 }
 
 bool SixuanEngine::pinyinKey(fcitx::InputContext *ic, SessionState &state,
@@ -409,12 +383,7 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
     auto &panel = ic->inputPanel();
     panel.reset();
 
-    if (!state.voice.empty()) {
-        fcitx::Text preedit;
-        preedit.append(state.voice, fcitx::TextFormatFlag::Underline);
-        preedit.setCursor(static_cast<int>(state.voice.size()));
-        panel.setPreedit(preedit);
-    } else if (!state.preedit.empty()) {
+    if (!state.preedit.empty()) {
         fcitx::Text preedit;
         preedit.append(state.preedit, fcitx::TextFormatFlag::Underline);
         preedit.setCursor(state.caret);
@@ -462,17 +431,7 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
     const bool hasComposition =
         !state->preedit.empty() || !state->candidates.empty();
 
-    if (isCtrl(sym)) {
-        int code = sym == FcitxKey_Control_L ? 29 : 97;
-        gesture(code, release ? 0 : 1);
-        return;
-    }
-
     if (!release && sym == FcitxKey_Escape) {
-        if (gesture(1, 1)) {
-            event.filterAndAccept();
-            return;
-        }
         if (hasComposition) {
             bool handled = false;
             if (pinyinKey(ic, *state, sym, stateMask, "", &handled) &&
@@ -483,10 +442,6 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
     }
 
     if (!release && sym == FcitxKey_space) {
-        if (gesture(57, 1)) {
-            event.filterAndAccept();
-            return;
-        }
         if (hasComposition) {
             bool handled = false;
             if (pinyinKey(ic, *state, sym, stateMask, " ", &handled) &&
@@ -566,58 +521,12 @@ std::string SixuanEngine::subModeLabelImpl(
     return "中";
 }
 
-fcitx::InputContext *SixuanEngine::targetContext() {
-    if (active_ && active_->hasFocus() &&
-        instance_->inputMethod(active_) == "sixuan")
-        return active_;
-    auto *ic = instance_->mostRecentInputContext();
-    if (ic && ic->hasFocus() &&
-        instance_->inputMethod(ic) == "sixuan" &&
-        !sensitive(ic))
-        return ic;
-    return nullptr;
-}
-
 void SixuanEngine::handleFrontendCall(GDBusConnection *, const gchar *,
                                       const gchar *, const gchar *,
                                       const gchar *method, GVariant *params,
                                       GDBusMethodInvocation *invocation,
                                       gpointer userData) {
     auto *engine = static_cast<SixuanEngine *>(userData);
-    if (!strcmp(method, "DeliverText")) {
-        const char *text = nullptr;
-        gboolean final = FALSE;
-        g_variant_get(params, "(&sb)", &text, &final);
-        auto *ic = engine->targetContext();
-        if (!ic) {
-            g_dbus_method_invocation_return_value(
-                invocation, g_variant_new("(b)", FALSE));
-            return;
-        }
-        auto *state = engine->stateFor(ic);
-        if (final) {
-            ic->commitString(text ? text : "");
-            state->voice.clear();
-            state->preedit.clear();
-            state->candidates.clear();
-        } else {
-            state->voice = text ? text : "";
-        }
-        engine->updateUI(ic, *state);
-        g_dbus_method_invocation_return_value(invocation,
-                                               g_variant_new("(b)", TRUE));
-        return;
-    }
-    if (!strcmp(method, "CancelText")) {
-        auto *ic = engine->targetContext();
-        if (ic) {
-            auto *state = engine->stateFor(ic);
-            state->voice.clear();
-            engine->updateUI(ic, *state);
-        }
-        g_dbus_method_invocation_return_value(invocation, nullptr);
-        return;
-    }
     if (!strcmp(method, "RefreshCandidates")) {
         guint64 session = 0;
         gboolean handled = FALSE, english = FALSE;
