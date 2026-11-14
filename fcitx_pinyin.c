@@ -337,7 +337,7 @@ static int process(FcitxPinyin *s, guint keyval, guint state,
       !word_delete)
     return FALSE;
   if (api->get_option(s->rime, "ascii_mode")) {
-    if (text && *text) {
+    if (text && *text && (guchar)text[0] >= 0x20 && text[0] != 0x7f) {
       append_commit(s, text);
       return TRUE;
     }
@@ -374,10 +374,13 @@ static int process(FcitxPinyin *s, guint keyval, guint state,
       return TRUE;
     }
   }
-  /* With an empty composition, hand bare editing keys (BackSpace, arrows,
-   * F-keys, ...) straight back to the application: the rime editor consumes
-   * them even when there is nothing to edit. */
-  if ((!s->raw || !*s->raw) && (!text || !*text))
+  /* With an empty rime composition, rime's editor still consumes bare
+   * editing keys (which arrive as control characters like "\b"); hand
+   * those straight back to the application. get_input is the
+   * authoritative composition state, unlike the tracked raw copy. */
+  if (!api->get_input(s->rime)[0] &&
+      (!text || !*text || (guchar)text[0] < 0x20 ||
+       (guchar)text[0] == 0x7f))
     return FALSE;
   char *before = g_strdup(s->raw);
   int handled;

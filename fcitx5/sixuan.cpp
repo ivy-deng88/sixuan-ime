@@ -464,16 +464,19 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
 
     /* Without a composition, bare editing keys (BackSpace, arrows, F-keys,
      * ...) belong to the application: pass them through without a round
-     * trip to the daemon. */
-    if (!hasComposition &&
-        fcitx::Key::keySymToUTF8(event.key().sym()).empty())
+     * trip to the daemon. keySymToUTF8 maps editing keys to control
+     * characters (BackSpace is "\b", Return "\n"), so a plain emptiness
+     * check mistakes them for text. */
+    const std::string text = fcitx::Key::keySymToUTF8(event.key().sym());
+    const bool printable = !text.empty() &&
+                           static_cast<unsigned char>(text[0]) >= 0x20 &&
+                           static_cast<unsigned char>(text[0]) != 0x7f;
+    if (!hasComposition && !printable)
         return;
     if (hasComposition && !isPrintableControl(sym) &&
-        !(sym >= FcitxKey_1 && sym <= FcitxKey_9) &&
-        fcitx::Key::keySymToUTF8(event.key().sym()).empty())
+        !(sym >= FcitxKey_1 && sym <= FcitxKey_9) && !printable)
         return;
 
-    std::string text = fcitx::Key::keySymToUTF8(event.key().sym());
     bool handled = false;
     if (pinyinKey(ic, *state, sym, stateMask, text, &handled) && handled)
         event.filterAndAccept();
