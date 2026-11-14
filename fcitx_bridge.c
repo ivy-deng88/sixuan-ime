@@ -185,7 +185,7 @@ static GVariant *copy_state(GVariant *state) {
   const char *preedit = NULL, *raw = NULL, *commit = NULL;
   gint32 caret = 0, cursor = 0;
   GVariant *array = NULL;
-  g_variant_get(state, SIXUAN_FCITX_STATE_TYPE, &session, &revision, &handled,
+  g_variant_get(state, "(ttbbsii@a(ss)ss)", &session, &revision, &handled,
                 &english, &preedit, &caret, &cursor, &array, &raw, &commit);
   GVariantBuilder candidates;
   g_variant_builder_init(&candidates, G_VARIANT_TYPE("a(ss)"));
@@ -200,7 +200,7 @@ static GVariant *copy_state(GVariant *state) {
   g_variant_unref(array);
   return g_variant_new(SIXUAN_FCITX_STATE_TYPE, session, revision, handled,
                        english, preedit ? preedit : "", caret, cursor,
-                       g_variant_builder_end(&candidates), raw ? raw : "",
+                       &candidates, raw ? raw : "",
                        commit ? commit : "");
 }
 
@@ -217,11 +217,12 @@ void native_fcitx_publish_state(GVariant *state) {
 
 static void return_state(GDBusMethodInvocation *invocation, GVariant *state) {
   GVariant *tuple = copy_state(state);
-  if (!tuple)
+  if (!tuple) {
+    GVariantBuilder empty;
+    g_variant_builder_init(&empty, G_VARIANT_TYPE("a(ss)"));
     tuple = g_variant_new(SIXUAN_FCITX_STATE_TYPE, (guint64)0, (guint64)0,
-                          FALSE, FALSE, "", 0, 0,
-                          g_variant_new_array(G_VARIANT_TYPE("(ss)"), NULL, 0),
-                          "", "");
+                          FALSE, FALSE, "", 0, 0, &empty, "", "");
+  }
   g_dbus_method_invocation_return_value(invocation, tuple);
 }
 

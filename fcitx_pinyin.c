@@ -420,7 +420,8 @@ static GVariant *state_variant(FcitxPinyin *s, int handled) {
                        s && pinyin_input_english() ? TRUE : FALSE,
                        s && s->preedit ? s->preedit : "",
                        s ? s->caret : 0, s ? s->cursor : 0,
-                       g_variant_builder_end(&candidates),
+                       /* Bare "a(ss)" consumes an open builder and ends it. */
+                       &candidates,
                        s && s->raw ? s->raw : "",
                        s && s->commit ? s->commit : "");
 }

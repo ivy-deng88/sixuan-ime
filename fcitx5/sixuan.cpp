@@ -342,7 +342,7 @@ bool SixuanEngine::applySnapshot(fcitx::InputContext *ic, SessionState &state,
     const char *preedit = nullptr, *raw = nullptr, *commit = nullptr;
     gint32 caret = 0, cursor = 0;
     GVariant *array = nullptr;
-    g_variant_get(reply, kStateSignature, &session, &revision, &handled,
+    g_variant_get(reply, "(ttbbsii@a(ss)ss)", &session, &revision, &handled,
                   &english, &preedit, &caret, &cursor, &array, &raw, &commit);
 
     if (session != 0)
@@ -523,9 +523,9 @@ void SixuanEngine::handleFrontendCall(GDBusConnection *, const gchar *,
         const char *preedit = nullptr, *raw = nullptr, *commit = nullptr;
         gint32 caret = 0, cursor = 0;
         GVariant *array = nullptr;
-        g_variant_get(params, kStateSignature, &session, &revision, &handled,
-                      &english, &preedit, &caret, &cursor, &array, &raw,
-                      &commit);
+        g_variant_get(params, "(ttbbsii@a(ss)ss)", &session, &revision,
+                      &handled, &english, &preedit, &caret, &cursor, &array,
+                      &raw, &commit);
         GVariantBuilder builder;
         g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
         for (gsize i = 0; i < g_variant_n_children(array); i++) {
@@ -546,7 +546,8 @@ void SixuanEngine::handleFrontendCall(GDBusConnection *, const gchar *,
                 GVariant *stateReply = g_variant_new(
                     kStateSignature, session, revision, handled, english,
                     preedit ? preedit : "", caret, cursor,
-                    g_variant_builder_end(&builder), raw ? raw : "",
+                    /* Bare "a(ss)" consumes an open builder and ends it. */
+                    &builder, raw ? raw : "",
                     commit ? commit : "");
                 engine->applySnapshot(ic, *pair.second, stateReply, false);
                 g_variant_unref(g_variant_ref_sink(stateReply));
