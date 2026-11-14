@@ -71,8 +71,15 @@ func TestSetupKDEMocked(t *testing.T) {
 				t.Fatal(err)
 			}
 			oldOutput, oldCommand := os.Stdout, runDesktopCommand
+			oldFcitx := fcitx5Desktop
 			os.Stdout = output
-			t.Cleanup(func() { os.Stdout = oldOutput; runDesktopCommand = oldCommand; output.Close() })
+			fcitx5Desktop = func() bool { return false }
+			t.Cleanup(func() {
+				os.Stdout = oldOutput
+				runDesktopCommand = oldCommand
+				fcitx5Desktop = oldFcitx
+				output.Close()
+			})
 			serviceCalls, getCalls, setCalls := 0, 0, 0
 			runDesktopCommand = func(name string, args ...string) (string, error) {
 				for _, arg := range args {
@@ -110,7 +117,7 @@ func TestSetupKDEMocked(t *testing.T) {
 				}
 				return "", nil
 			}
-			if err := setupDesktop(); err != nil {
+			if err := setupDesktop(false); err != nil {
 				t.Fatal(err)
 			}
 			wantSets := 0
@@ -138,5 +145,57 @@ func TestSetupKDEMocked(t *testing.T) {
 				t.Fatal("missing nonfatal failure guidance")
 			}
 		})
+	}
+}
+
+func TestSetupFcitx5Detected(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CURRENT_DESKTOP", "KDE")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	output, err := os.CreateTemp(root, "output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldOutput, oldCommand := os.Stdout, runDesktopCommand
+	oldFcitx, oldRegister := fcitx5Desktop, registerFcitx5
+	os.Stdout = output
+	t.Cleanup(func() {
+		os.Stdout = oldOutput
+		runDesktopCommand = oldCommand
+		fcitx5Desktop = oldFcitx
+		registerFcitx5 = oldRegister
+		output.Close()
+	})
+	fcitx5Desktop = func() bool { return true }
+	runDesktopCommand = func(name string, args ...string) (string, error) {
+		if name != "systemctl" {
+			t.Fatalf("unexpected command: %s %v", name, args)
+		}
+		return "", nil
+	}
+	registered := false
+	registerFcitx5 = func() error { registered = true; return nil }
+	if err := setupDesktop(true); err != nil {
+		t.Fatal(err)
+	}
+	if !registered {
+		t.Fatal("explicit --register-fcitx5 did not register")
+	}
+	registered = false
+	if err := setupDesktop(false); err != nil {
+		t.Fatal(err)
+	}
+	if registered {
+		t.Fatal("plain setup must not register fcitx5")
+	}
+	printed, err := os.ReadFile(output.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Fcitx 5", "fcitx5-config-qt", "思玄拼音", "仅支持本地拼音"} {
+		if !strings.Contains(string(printed), required) {
+			t.Fatalf("missing %q in output", required)
+		}
 	}
 }

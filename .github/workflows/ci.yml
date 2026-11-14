@@ -10,9 +10,9 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install -y git ca-certificates build-essential pkg-config libgtk-3-dev libibus-1.0-dev librime-dev libpulse-dev rime-data-luna-pinyin ibus dpkg-dev
+          apt-get install -y git ca-certificates build-essential pkg-config libgtk-3-dev libibus-1.0-dev librime-dev libpulse-dev rime-data-luna-pinyin ibus dpkg-dev libfcitx5core-dev
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: make test schema-test vet build deb
+      - run: make test schema-test vet build fcitx5 deb

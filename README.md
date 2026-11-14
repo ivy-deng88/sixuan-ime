@@ -20,7 +20,8 @@
 
 ```sh
 sudo apt install build-essential pkg-config libgtk-3-dev libibus-1.0-dev \
-  librime-dev libpulse-dev rime-data-luna-pinyin ibus ffmpeg dpkg-dev
+  librime-dev libpulse-dev libfcitx5core-dev rime-data-luna-pinyin ibus \
+  ffmpeg dpkg-dev
 make test
 make build
 make deb
@@ -30,7 +31,16 @@ sixuan-ime setup
 
 安装后注销并重新登录，在系统输入源中选择“思玄拼音”。设置入口为输入法菜单中的“思玄输入法设置”，也可运行 `sixuan-ime settings`。`setup` 会注册输入源、启用用户服务和候选窗扩展。
 
-`make build` 只生成 `dist/sixuan-ime`，不修改系统；桌面集成需要安装 deb 包。`make deb` 按当前主机架构打包，文件名随架构变化。
+`make build` 只生成 `dist/sixuan-ime`，不修改系统；桌面集成需要安装 deb 包。`make deb` 按当前主机架构打包，文件名随架构变化，并同时构建 Fcitx 5 插件（`make fcitx5` 只构建 `dist/libsixuan.so`，需要 `libfcitx5core-dev`）。
+
+## Fcitx 5
+
+思玄拼音也以 Fcitx 5 插件的形式提供，与 `fcitx5-rime` 等输入法并存，不替换系统里的 Fcitx 5。插件不直接链接 librime，Rime 仍由思玄守护进程持有，因此沿用同一套本地方案、词库和候选排序。
+
+在 Fcitx 5 中启用：安装 deb 包后重启 Fcitx 5 或重新登录，然后在 Fcitx 5 配置工具（`fcitx5-config-qt`）的“输入法”列表中添加“思玄拼音”，也可以运行 `sixuan-ime setup --register-fcitx5` 自动添加（该操作会重启 Fcitx 5）。`sixuan-ime setup` 在检测到 Fcitx 5 会话时只打印以上指引，不会自行切换输入框架。
+
+当前阶段 Fcitx 5 插件仅支持本地拼音输入；语音输入、云候选和候选窗皮肤只在 IBus 版本中提供。`pingyin.sh` 可用于在 IBus 与 Fcitx 5 会话之间手动切换（需要注销重新登录生效）。
+
 
 ## 语音服务
 

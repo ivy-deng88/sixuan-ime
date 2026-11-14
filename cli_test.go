@@ -158,7 +158,9 @@ func TestPublicSetupMocked(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	old := runDesktopCommand
-	t.Cleanup(func() { runDesktopCommand = old })
+	oldFcitx := fcitx5Desktop
+	t.Cleanup(func() { runDesktopCommand = old; fcitx5Desktop = oldFcitx })
+	fcitx5Desktop = func() bool { return false }
 	sources := "[('xkb', 'us'), ('ibus', 'other')]"
 	extensions := "['another@example.invalid']"
 	serviceCalls := 0
@@ -190,12 +192,12 @@ func TestPublicSetupMocked(t *testing.T) {
 		}
 		return "", nil
 	}
-	if e := setupDesktop(); e != nil {
+	if e := setupDesktop(false); e != nil {
 		t.Fatal(e)
 	}
 	p := filepath.Join(configDirectory(), "config.json")
 	before, _ := os.ReadFile(p)
-	if e := setupDesktop(); e != nil {
+	if e := setupDesktop(false); e != nil {
 		t.Fatal(e)
 	}
 	after, _ := os.ReadFile(p)

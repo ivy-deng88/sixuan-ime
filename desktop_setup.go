@@ -98,7 +98,7 @@ func printNonGNOMEInstructions() {
 	fmt.Printf("使用 ibus engine %s 或桌面自带输入法设置切换到「思玄拼音」。\n", pinyinEngineID)
 }
 
-func setupDesktop() error {
+func setupDesktop(registerFcitx bool) error {
 	dir := configDirectory()
 	path := filepath.Join(dir, "config.json")
 	if e := os.MkdirAll(dir, 0700); e != nil {
@@ -178,6 +178,31 @@ func setupDesktop() error {
 	} else {
 		printNonGNOMEInstructions()
 	}
+	if fcitx5Desktop() {
+		if registerFcitx {
+			if err := registerFcitx5(); err != nil {
+				fmt.Printf("未能自动注册 Fcitx 5 输入法：%v\n", err)
+				fmt.Println("请重启 Fcitx 5 后，在 Fcitx 5 配置工具中手动添加「思玄拼音」。")
+			} else {
+				fmt.Println("已将「思玄拼音」加入当前 Fcitx 5 输入法组，Fcitx 5 已重启。")
+			}
+		} else {
+			printFcitx5Instructions()
+		}
+	} else if registerFcitx {
+		fmt.Println("未检测到正在运行的 Fcitx 5，跳过注册。")
+	}
 	fmt.Println("配置语音识别：" + officialASRSetupInstructions)
 	return nil
+}
+
+// Changing the live Fcitx session restarts the running input method, so
+// automatic registration only happens behind the explicit --register-fcitx5
+// flag; plain setup only prints guidance.
+func printFcitx5Instructions() {
+	fmt.Println("检测到当前会话正在使用 Fcitx 5：")
+	fmt.Println("· 思玄拼音同时提供 Fcitx 5 插件，可与 fcitx5-rime 等输入法并存。")
+	fmt.Println("· 请重启 Fcitx 5 或重新登录以加载插件，然后在 Fcitx 5 配置工具（fcitx5-config-qt）的「输入法」列表中添加「思玄拼音」。")
+	fmt.Println("· 也可以运行 sixuan-ime setup --register-fcitx5 自动添加（会重启 Fcitx 5）。")
+	fmt.Println("· 当前阶段 Fcitx 5 仅支持本地拼音；语音输入与云候选请继续使用 IBus 版思玄拼音。")
 }

@@ -192,7 +192,17 @@ func commonCLI(args []string) (bool, error) {
 	case "cloud":
 		return true, cloudCommand(args[1:])
 	case "setup":
-		return true, setupDesktop()
+		fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		registerFcitx := fs.Bool("register-fcitx5", false,
+			"将思玄拼音加入当前 Fcitx 5 输入法组（会重启 Fcitx 5）")
+		if e := fs.Parse(args[1:]); e != nil {
+			return true, e
+		}
+		if fs.NArg() != 0 {
+			return true, fmt.Errorf("setup 不支持的参数：%s", strings.Join(fs.Args(), " "))
+		}
+		return true, setupDesktop(*registerFcitx)
 	case "asr":
 		if len(args) > 1 {
 			switch args[1] {
