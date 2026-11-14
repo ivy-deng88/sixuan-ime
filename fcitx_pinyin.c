@@ -374,6 +374,11 @@ static int process(FcitxPinyin *s, guint keyval, guint state,
       return TRUE;
     }
   }
+  /* With an empty composition, hand bare editing keys (BackSpace, arrows,
+   * F-keys, ...) straight back to the application: the rime editor consumes
+   * them even when there is nothing to edit. */
+  if ((!s->raw || !*s->raw) && (!text || !*text))
+    return FALSE;
   char *before = g_strdup(s->raw);
   int handled;
   if (word_delete && keyval == SX_KEY_DELETE) {

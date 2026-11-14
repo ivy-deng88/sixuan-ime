@@ -462,7 +462,10 @@ void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
     if (chord && !wordDelete)
         return;
 
-    if (!hasComposition && !isPrintableControl(sym) &&
+    /* Without a composition, bare editing keys (BackSpace, arrows, F-keys,
+     * ...) belong to the application: pass them through without a round
+     * trip to the daemon. */
+    if (!hasComposition &&
         fcitx::Key::keySymToUTF8(event.key().sym()).empty())
         return;
     if (hasComposition && !isPrintableControl(sym) &&
