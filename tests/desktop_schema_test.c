@@ -1,6 +1,17 @@
 /* No display, service, or bus connection is needed for these settings paths. */
 #include "../desktop.c"
 
+/* desktop.c probes the Fcitx bridge, which is not linked into this test.
+ * Report Fcitx as absent so the IBus/GNOME paths stay exercisable. */
+int native_fcitx_running(void) { return 0; }
+int native_fcitx_command_call(const char *method, GVariant *params,
+                              GDBusMethodInvocation *invocation) {
+  (void)method;
+  (void)params;
+  (void)invocation;
+  return 0;
+}
+
 char *goBuildName(int index) {
   return g_strdup(index == 1 ? "test-pinyin" : "");
 }
