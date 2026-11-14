@@ -121,7 +121,7 @@ func setupDesktop(registerFcitx bool) error {
 	if e != nil {
 		return e
 	}
-	if _, e = runDesktopCommand("systemctl", "--user", "enable", "--now", "sixuan-ime.service"); e != nil {
+	if _, e = runDesktopCommand("systemctl", "--user", "enable", "--now", "sixuan-fcitx5.service"); e != nil {
 		return e
 	}
 	gnome := isGNOMEDesktop()
@@ -169,8 +169,8 @@ func setupDesktop(registerFcitx bool) error {
 	if e = os.MkdirAll(apps, 0700); e != nil {
 		return e
 	}
-	desktop := "[Desktop Entry]\nType=Application\nName=思玄语音输入\nComment=思玄输入法设置\nExec=/usr/bin/sixuan-ime settings\nIcon=audio-input-microphone\nTerminal=false\nCategories=Settings;Utility;\n"
-	if e = os.WriteFile(filepath.Join(apps, "sixuan-ime.desktop"), []byte(desktop), 0644); e != nil {
+	desktop := "[Desktop Entry]\nType=Application\nName=思玄语音输入\nComment=思玄输入法设置\nExec=/usr/bin/sixuan-fcitx5 settings\nIcon=audio-input-microphone\nTerminal=false\nCategories=Settings;Utility;\n"
+	if e = os.WriteFile(filepath.Join(apps, "sixuan-fcitx5.desktop"), []byte(desktop), 0644); e != nil {
 		return e
 	}
 	if gnome {
@@ -203,6 +203,6 @@ func printFcitx5Instructions() {
 	fmt.Println("检测到当前会话正在使用 Fcitx 5：")
 	fmt.Println("· 思玄拼音同时提供 Fcitx 5 插件，可与 fcitx5-rime 等输入法并存。")
 	fmt.Println("· 请重启 Fcitx 5 或重新登录以加载插件，然后在 Fcitx 5 配置工具（fcitx5-config-qt）的「输入法」列表中添加「思玄拼音」。")
-	fmt.Println("· 也可以运行 sixuan-ime setup --register-fcitx5 自动添加（会重启 Fcitx 5）。")
+	fmt.Println("· 也可以运行 sixuan-fcitx5 setup --register-fcitx5 自动添加（会重启 Fcitx 5）。")
 	fmt.Println("· 当前阶段 Fcitx 5 仅支持本地拼音；语音输入与云候选请继续使用 IBus 版思玄拼音。")
 }

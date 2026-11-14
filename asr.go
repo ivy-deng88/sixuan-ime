@@ -24,7 +24,7 @@ type asrConfig struct {
 }
 
 const officialASRURL = "wss://sixuanai.com/v1/asr/stream"
-const officialASRSetupInstructions = "登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-ime asr config --provider sixuan --api-key-stdin"
+const officialASRSetupInstructions = "登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-fcitx5 asr config --provider sixuan --api-key-stdin"
 
 func effectiveASRURL(c asrConfig) string {
 	if c.Provider == "sixuan" && strings.TrimSpace(c.URL) == "" {

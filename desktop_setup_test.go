@@ -88,7 +88,7 @@ func TestSetupKDEMocked(t *testing.T) {
 					}
 				}
 				if name == "systemctl" {
-					if strings.Join(args, " ") != "--user enable --now sixuan-ime.service" {
+					if strings.Join(args, " ") != "--user enable --now sixuan-fcitx5.service" {
 						t.Fatal(args)
 					}
 					serviceCalls++
@@ -127,7 +127,7 @@ func TestSetupKDEMocked(t *testing.T) {
 			if serviceCalls != 1 || getCalls != 1 || setCalls != wantSets {
 				t.Fatalf("calls: service=%d get=%d set=%d", serviceCalls, getCalls, setCalls)
 			}
-			for _, path := range []string{filepath.Join(configDirectory(), "config.json"), filepath.Join(root, "data/applications/sixuan-ime.desktop")} {
+			for _, path := range []string{filepath.Join(configDirectory(), "config.json"), filepath.Join(root, "data/applications/sixuan-fcitx5.desktop")} {
 				if _, err := os.Stat(path); err != nil {
 					t.Fatal(err)
 				}

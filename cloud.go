@@ -73,7 +73,7 @@ func queryCloud(ctx context.Context, input string, _ config) ([]cloudCandidate, 
 }
 func cloudCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("用法：sixuan-ime cloud status|enable|disable|query 拼音")
+		return errors.New("用法：sixuan-fcitx5 cloud status|enable|disable|query 拼音")
 	}
 	c := readConfig()
 	switch args[0] {
@@ -88,7 +88,7 @@ func cloudCommand(args []string) error {
 		return nil
 	case "query":
 		if len(args) != 2 {
-			return errors.New("用法：sixuan-ime cloud query 'ni hao'")
+			return errors.New("用法：sixuan-fcitx5 cloud query 'ni hao'")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.CloudTimeoutMS)*time.Millisecond)
 		defer cancel()

@@ -24,7 +24,7 @@ func TestPublicProviders(t *testing.T) {
 	if c.configError != configureASRMessage || !c.PinyinEnabled {
 		t.Fatal("unconfigured voice must leave local pinyin usable")
 	}
-	if c.configError != "请先配置语音识别：登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-ime asr config --provider sixuan --api-key-stdin" {
+	if c.configError != "请先配置语音识别：登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-fcitx5 asr config --provider sixuan --api-key-stdin" {
 		t.Fatal("missing official service guidance")
 	}
 	if e := editConfig(map[string]any{"cloud_candidates": true, "dictionary_sync": true}); e != nil {
@@ -167,7 +167,7 @@ func TestPublicSetupMocked(t *testing.T) {
 	setCalls := 0
 	runDesktopCommand = func(name string, args ...string) (string, error) {
 		if name == "systemctl" {
-			if strings.Join(args, " ") != "--user enable --now sixuan-ime.service" {
+			if strings.Join(args, " ") != "--user enable --now sixuan-fcitx5.service" {
 				t.Fatal(args)
 			}
 			serviceCalls++
@@ -207,11 +207,11 @@ func TestPublicSetupMocked(t *testing.T) {
 	if !strings.Contains(sources, "'other'") || !strings.Contains(extensions, "another@example.invalid") {
 		t.Fatal("lost user configuration")
 	}
-	if _, e := os.Stat(filepath.Join(root, "data/applications/sixuan-ime.desktop")); e != nil {
+	if _, e := os.Stat(filepath.Join(root, "data/applications/sixuan-fcitx5.desktop")); e != nil {
 		t.Fatal(e)
 	}
 	printed, e := os.ReadFile(output.Name())
-	if e != nil || !bytes.Contains(printed, []byte("登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-ime asr config --provider sixuan --api-key-stdin")) {
+	if e != nil || !bytes.Contains(printed, []byte("登录 sixuanai.com 账号页创建 API Key，然后运行 sixuan-fcitx5 asr config --provider sixuan --api-key-stdin")) {
 		t.Fatal("setup omitted voice configuration instructions")
 	}
 }

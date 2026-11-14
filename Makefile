@@ -1,7 +1,7 @@
 .PHONY: build test vet deb schema-test fcitx5
 build:
 	mkdir -p dist
-	go build -buildvcs=false -trimpath -o dist/sixuan-ime .
+	go build -buildvcs=false -trimpath -o dist/sixuan-fcitx5 .
 test:
 	go test ./...
 schema-test:

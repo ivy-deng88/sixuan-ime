@@ -520,7 +520,7 @@ int native_init(int keys) {
           "audio-input-microphone", "default");
       ibus_component_add_engine(component, engine);
       char *cli = goPublicBuild()
-                      ? g_strdup("/usr/bin/sixuan-ime")
+                      ? g_strdup("/usr/bin/sixuan-fcitx5")
                       : g_build_filename(g_get_home_dir(), ".local", "bin",
                                          NAME_CLI, NULL);
       char *quoted = g_shell_quote(cli),

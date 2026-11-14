@@ -45,7 +45,7 @@ show_status() {
 
   printf '%s\n' '用户服务：'
   if have systemctl; then
-    for unit in fcitx5.service sixuan-ime.service; do
+    for unit in fcitx5.service sixuan-fcitx5.service; do
       state=$(systemctl --user is-active "$unit" 2>/dev/null || true)
       enabled=$(systemctl --user is-enabled "$unit" 2>/dev/null || true)
       printf '  %-22s active=%-10s enabled=%s\n' "$unit" "${state:-unknown}" "${enabled:-unknown}"
@@ -88,7 +88,7 @@ main() {
 
   if [[ "$target" == fcitx5 ]]; then
     # 思玄服务依赖真正的 IBus 引擎宿主；Fcitx 模式下必须停用。
-    systemctl --user disable --now sixuan-ime.service >/dev/null 2>&1 || true
+    systemctl --user disable --now sixuan-fcitx5.service >/dev/null 2>&1 || true
     im-config -n fcitx5
     stop_ibus
     printf '%s\n' '已配置为 Fcitx 5。请注销并重新登录以完整切换输入法环境。'
@@ -96,9 +96,9 @@ main() {
   fi
 
   # IBus / 思玄模式：让六元输入法服务在下次登录时自动启动。
-  systemctl --user disable --now sixuan-ime.service >/dev/null 2>&1 || true
-  if ! systemctl --user enable sixuan-ime.service >/dev/null 2>&1; then
-    fail '未找到 sixuan-ime.service，请先重新安装 sixuan-ime 软件包'
+  systemctl --user disable --now sixuan-fcitx5.service >/dev/null 2>&1 || true
+  if ! systemctl --user enable sixuan-fcitx5.service >/dev/null 2>&1; then
+    fail '未找到 sixuan-fcitx5.service，请先重新安装 sixuan-fcitx5 软件包'
   fi
   im-config -n ibus
   stop_fcitx5
@@ -106,7 +106,7 @@ main() {
   if have gsettings; then
     sources=$(gsettings get org.gnome.desktop.input-sources sources 2>/dev/null || true)
     if [[ "$sources" != *sixuan-pinyin* ]]; then
-      printf '%s\n' '提示：GNOME 输入源中未找到“思玄拼音”，登录后请运行：sixuan-ime setup'
+      printf '%s\n' '提示：GNOME 输入源中未找到“思玄拼音”，登录后请运行：sixuan-fcitx5 setup'
     fi
   fi
 

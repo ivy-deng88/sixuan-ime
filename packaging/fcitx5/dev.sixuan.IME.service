@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=dev.sixuan.IME
-Exec=/usr/bin/sixuan-ime daemon
-SystemdService=sixuan-ime.service
+Exec=/usr/bin/sixuan-fcitx5 daemon
+SystemdService=sixuan-fcitx5.service

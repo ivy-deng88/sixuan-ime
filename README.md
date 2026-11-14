@@ -14,7 +14,7 @@
 
 ## 构建与安装
 
-当前验证环境为 Ubuntu 26.04 amd64、GNOME 50 / Wayland。其他发行版和桌面环境需要自行适配；候选窗扩展目前声明支持 GNOME 50。在 KDE Plasma 等非 GNOME 桌面上，`sixuan-ime setup` 会把“思玄拼音”加入 IBus 引擎列表，并打印候选面板（kimpanel）的配置步骤；候选窗皮肤仅 GNOME 支持。
+当前验证环境为 Ubuntu 26.04 amd64、GNOME 50 / Wayland。其他发行版和桌面环境需要自行适配；候选窗扩展目前声明支持 GNOME 50。在 KDE Plasma 等非 GNOME 桌面上，`sixuan-fcitx5 setup` 会把“思玄拼音”加入 IBus 引擎列表，并打印候选面板（kimpanel）的配置步骤；候选窗皮肤仅 GNOME 支持。
 
 需要 Go 1.25 或更新版本，以及系统开发依赖：
 
@@ -25,19 +25,19 @@ sudo apt install build-essential pkg-config libgtk-3-dev libibus-1.0-dev \
 make test
 make build
 make deb
-sudo apt install ./dist/sixuan-ime_1.2.5_amd64.deb
-sixuan-ime setup
+sudo apt install ./dist/sixuan-fcitx5_1.2.5_amd64.deb
+sixuan-fcitx5 setup
 ```
 
-安装后注销并重新登录，在系统输入源中选择“思玄拼音”。设置入口为输入法菜单中的“思玄输入法设置”，也可运行 `sixuan-ime settings`。`setup` 会注册输入源、启用用户服务和候选窗扩展。
+安装后注销并重新登录，在系统输入源中选择“思玄拼音”。设置入口为输入法菜单中的“思玄输入法设置”，也可运行 `sixuan-fcitx5 settings`。`setup` 会注册输入源、启用用户服务和候选窗扩展。
 
-`make build` 只生成 `dist/sixuan-ime`，不修改系统；桌面集成需要安装 deb 包。`make deb` 按当前主机架构打包，文件名随架构变化，并同时构建 Fcitx 5 插件（`make fcitx5` 只构建 `dist/libsixuan.so`，需要 `libfcitx5core-dev`）。
+`make build` 只生成 `dist/sixuan-fcitx5`，不修改系统；桌面集成需要安装 deb 包。`make deb` 按当前主机架构打包，文件名随架构变化，并同时构建 Fcitx 5 插件（`make fcitx5` 只构建 `dist/libsixuan.so`，需要 `libfcitx5core-dev`）。
 
 ## Fcitx 5
 
 思玄拼音也以 Fcitx 5 插件的形式提供，与 `fcitx5-rime` 等输入法并存，不替换系统里的 Fcitx 5。插件不直接链接 librime，Rime 仍由思玄守护进程持有，因此沿用同一套本地方案、词库和候选排序。
 
-在 Fcitx 5 中启用：安装 deb 包后重启 Fcitx 5 或重新登录，然后在 Fcitx 5 配置工具（`fcitx5-config-qt`）的“输入法”列表中添加“思玄拼音”，也可以运行 `sixuan-ime setup --register-fcitx5` 自动添加（该操作会重启 Fcitx 5）。`sixuan-ime setup` 在检测到 Fcitx 5 会话时只打印以上指引，不会自行切换输入框架。
+在 Fcitx 5 中启用：安装 deb 包后重启 Fcitx 5 或重新登录，然后在 Fcitx 5 配置工具（`fcitx5-config-qt`）的“输入法”列表中添加“思玄拼音”，也可以运行 `sixuan-fcitx5 setup --register-fcitx5` 自动添加（该操作会重启 Fcitx 5）。`sixuan-fcitx5 setup` 在检测到 Fcitx 5 会话时只打印以上指引，不会自行切换输入框架。
 
 当前阶段 Fcitx 5 插件仅支持本地拼音输入；语音输入、云候选和候选窗皮肤只在 IBus 版本中提供。`pingyin.sh` 可用于在 IBus 与 Fcitx 5 会话之间手动切换（需要注销重新登录生效）。
 
@@ -47,15 +47,15 @@ sixuan-ime setup
 使用思玄服务时，在 [官网](https://sixuanai.com/) 账号页创建 API Key，然后通过标准输入保存，不把密钥写到命令参数中：
 
 ```sh
-sixuan-ime asr config --provider sixuan --api-key-stdin
+sixuan-fcitx5 asr config --provider sixuan --api-key-stdin
 # 粘贴自己的 API Key，换行后按 Ctrl+D
-sixuan-ime asr status
+sixuan-fcitx5 asr status
 ```
 
 也可使用自己部署的 FunASR（以下为本机示例地址）：
 
 ```sh
-sixuan-ime asr config --provider funasr --url ws://127.0.0.1:10095
+sixuan-fcitx5 asr config --provider funasr --url ws://127.0.0.1:10095
 ```
 
 OpenAI 兼容服务使用 `--provider openai --url <接口地址> --model <模型名称>`，按服务要求通过 `--api-key-stdin` 配置密钥。公开网络连接应使用 HTTPS/WSS。服务端独立部署，不包含在本仓库中；客户端源码许可不授予在线服务的免费额度。
@@ -63,9 +63,9 @@ OpenAI 兼容服务使用 `--provider openai --url <接口地址> --model <模�
 ## 云候选与隐私
 
 ```sh
-sixuan-ime cloud status
-sixuan-ime cloud enable
-sixuan-ime cloud disable
+sixuan-fcitx5 cloud status
+sixuan-fcitx5 cloud enable
+sixuan-fcitx5 cloud disable
 ```
 
 云候选通过思玄服务提供，无需 API Key；启用后会将当前拼音发送到该服务。语音识别会将录音发送到你配置的识别服务。可以关闭云候选，只使用本地拼音。
