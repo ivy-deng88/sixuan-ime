@@ -169,9 +169,18 @@ func TestSetupFcitx5Detected(t *testing.T) {
 	})
 	fcitx5Desktop = func() bool { return true }
 	runDesktopCommand = func(name string, args ...string) (string, error) {
-		if name != "systemctl" {
-			t.Fatalf("unexpected command: %s %v", name, args)
+		if name == "systemctl" {
+			return "", nil
 		}
+		// KDE 会话走 IBus preload 分支，允许其 gsettings 探测。
+		if name == "gsettings" && len(args) >= 3 &&
+			args[1] == "org.freedesktop.ibus.general" {
+			if args[0] == "get" {
+				return "[]", nil
+			}
+			return "", nil
+		}
+		t.Fatalf("unexpected command: %s %v", name, args)
 		return "", nil
 	}
 	registered := false
