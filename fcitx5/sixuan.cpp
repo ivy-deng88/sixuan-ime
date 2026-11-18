@@ -117,6 +117,7 @@ private:
     bool pinyinKey(fcitx::InputContext *ic, SessionState &state,
                    guint32 keyval, guint32 rimeState, const std::string &text,
                    bool *handled);
+    void claimShiftTap(fcitx::KeyEvent &event);
     void closeSession(SessionState &state);
 
     static void handleFrontendCall(GDBusConnection *, const gchar *,
@@ -133,14 +134,17 @@ private:
     fcitx::InputContext *active_ = nullptr;
     std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>
         destroyHandler_;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>
+        shiftClaimHandler_;
 };
 
 const char *frontendXml =
     "<node>"
     "<interface name='dev.sixuan.Fcitx5'>"
     "<method name='RefreshCandidates'>"
-    "<arg type='t' direction='in'/><arg type='b' direction='in'/>"
-    "<arg type='b' direction='in'/><arg type='s' direction='in'/>"
+    "<arg type='t' direction='in'/><arg type='t' direction='in'/>"
+    "<arg type='b' direction='in'/><arg type='b' direction='in'/>"
+    "<arg type='s' direction='in'/>"
     "<arg type='i' direction='in'/><arg type='i' direction='in'/>"
     "<arg type='a(ss)' direction='in'/><arg type='s' direction='in'/>"
     "<arg type='s' direction='in'/>"
@@ -233,9 +237,21 @@ SixuanEngine::SixuanEngine(fcitx::Instance *instance) : instance_(instance) {
             if (active_ == ic)
                 active_ = nullptr;
         });
+    // Fcitx 5 ships AltTriggerKeys=Shift_L, which grabs a lone Shift before
+    // the engine's InputMethod-phase keyEvent can use it to toggle
+    // Chinese/English. Claim that Shift tap one phase earlier so the toggle
+    // reaches us; stay out of the way when the user cleared AltTriggerKeys or
+    // a different input method is active.
+    shiftClaimHandler_ = instance_->watchEvent(
+        fcitx::EventType::InputContextKeyEvent,
+        fcitx::EventWatcherPhase::PreInputMethod,
+        [this](fcitx::Event &event) {
+            claimShiftTap(static_cast<fcitx::KeyEvent &>(event));
+        });
 }
 
 SixuanEngine::~SixuanEngine() {
+    shiftClaimHandler_.reset();
     destroyHandler_.reset();
     for (auto &pair : states_)
         closeSession(*pair.second);
@@ -405,6 +421,39 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
 
     ic->updatePreedit();
     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+}
+
+void SixuanEngine::claimShiftTap(fcitx::KeyEvent &event) {
+    const auto sym = event.origKey().sym();
+    if (sym != FcitxKey_Shift_L && sym != FcitxKey_Shift_R)
+        return;
+
+    auto *ic = event.inputContext();
+    const auto *entry = instance_->inputMethodEntry(ic);
+    if (!entry || instance_->inputMethodEngine(ic) !=
+                      static_cast<fcitx::InputMethodEngine *>(this))
+        return;
+    if (!fcitx::Key(sym).checkKeyList(
+            instance_->globalConfig().altTriggerKeys()))
+        return;
+
+    // Run our own Shift handling (the lone-tap Chinese/English toggle), then
+    // filter the event so Fcitx 5's trigger-key handler in the InputMethod
+    // phase never sees this Shift and cannot switch to the first input method.
+    // Shift itself is not consumed, so the frontend still forwards it to the
+    // application.
+    auto *state = stateFor(ic);
+    const bool wasEnglish = state->english;
+    keyEvent(*entry, event);
+    event.filter();
+    // Filtering in PreInputMethod skips the InputMethod phase, so Fcitx 5
+    // never notices the sub-mode change on its own. Refresh both the transient
+    // hint and the status area (the tray "中/英" label read by GNOME Shell via
+    // kimpanel) when the shift tap toggled Chinese/English.
+    if (state->english != wasEnglish) {
+        instance_->showInputMethodInformation(ic);
+        ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
+    }
 }
 
 void SixuanEngine::keyEvent(const fcitx::InputMethodEntry & /*entry*/,
