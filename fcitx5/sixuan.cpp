@@ -70,8 +70,6 @@ public:
         : engine_(engine), ic_(ic), session_(session), revision_(revision),
           index_(index) {
         setText(fcitx::Text(candidate.text));
-        if (!candidate.source.empty())
-            setComment(fcitx::Text(candidate.source));
     }
 
     void select(fcitx::InputContext *inputContext) const override;

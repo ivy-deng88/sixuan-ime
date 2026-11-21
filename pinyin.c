@@ -199,10 +199,8 @@ static void show_lookup(PinyinEngine *e) {
   IBusLookupTable *table = ibus_lookup_table_new(9, e->cursor, TRUE, TRUE);
   for (guint i = 0; i < e->merged->len; i++) {
     Choice *c = g_ptr_array_index(e->merged, i);
-    char *label = *c->source ? g_strdup_printf("%s 〔%s〕", c->text, c->source)
-                             : g_strdup(c->text);
-    ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(label));
-    g_free(label);
+    ibus_lookup_table_append_candidate(table,
+                                       ibus_text_new_from_string(c->text));
   }
   if (e->merged->len)
     e->cursor = CLAMP(e->cursor, 0, (int)e->merged->len - 1);
