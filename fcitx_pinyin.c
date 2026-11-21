@@ -22,6 +22,10 @@ extern int goPreferenceValue(char *);
 #define SX_KEY_DOWN 0xff54
 #define SX_KEY_PAGE_UP 0xff55
 #define SX_KEY_PAGE_DOWN 0xff56
+#define SX_KEY_MINUS 0x002d
+#define SX_KEY_EQUAL 0x003d
+#define SX_KEY_KP_SUBTRACT 0xffad
+#define SX_KEY_KP_ADD 0xffab
 #define SX_KEY_SHIFT_L 0xffe1
 #define SX_KEY_SHIFT_R 0xffe2
 #define SX_SHIFT_MASK (1u << 0)
@@ -364,6 +368,10 @@ static int process(FcitxPinyin *s, guint keyval, guint state,
     else if (keyval == SX_KEY_PAGE_UP)
       delta = -9;
     else if (keyval == SX_KEY_PAGE_DOWN)
+      delta = 9;
+    else if (keyval == SX_KEY_MINUS || keyval == SX_KEY_KP_SUBTRACT)
+      delta = -9;
+    else if (keyval == SX_KEY_EQUAL || keyval == SX_KEY_KP_ADD)
       delta = 9;
     if (delta) {
       s->navigated = 1;

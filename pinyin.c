@@ -450,6 +450,10 @@ static gboolean process(IBusEngine *engine, guint keyval, guint keycode,
       delta = -9;
     else if (keyval == IBUS_Page_Down)
       delta = 9;
+    else if (keyval == IBUS_minus || keyval == IBUS_KP_Subtract)
+      delta = -9;
+    else if (keyval == IBUS_equal || keyval == IBUS_KP_Add)
+      delta = 9;
     if (delta) {
       e->navigated = 1;
       e->revision++;
