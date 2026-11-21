@@ -413,6 +413,9 @@ void SixuanEngine::updateUI(fcitx::InputContext *ic, SessionState &state) {
              fcitx::Key(FcitxKey_5), fcitx::Key(FcitxKey_6),
              fcitx::Key(FcitxKey_7), fcitx::Key(FcitxKey_8),
              fcitx::Key(FcitxKey_9)});
+        /* setGlobalCursorIndex does not turn pages on a freshly built list;
+         * select the page holding the cursor explicitly. */
+        list->setPage(state.cursor / 9);
         list->setGlobalCursorIndex(state.cursor);
         panel.setCandidateList(std::move(list));
     } else {
