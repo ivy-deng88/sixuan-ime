@@ -46,6 +46,7 @@ typedef struct {
   guint shift_held, modifiers;
   int shift_alone;
   char *raw, *preedit, *commit;
+  char *pending_raw, *pending_text;
   int caret;
   GPtrArray *local, *personal, *cloud, *merged;
 } FcitxPinyin;
@@ -81,6 +82,8 @@ static void free_session(gpointer data) {
   g_free(s->raw);
   g_free(s->preedit);
   g_free(s->commit);
+  g_free(s->pending_raw);
+  g_free(s->pending_text);
   g_ptr_array_free(s->merged, TRUE);
   g_ptr_array_free(s->local, TRUE);
   g_ptr_array_free(s->personal, TRUE);
@@ -101,6 +104,8 @@ static FcitxPinyin *create(void) {
   s->raw = g_strdup("");
   s->preedit = g_strdup("");
   s->commit = g_strdup("");
+  s->pending_raw = g_strdup("");
+  s->pending_text = g_strdup("");
   s->local = g_ptr_array_new_with_free_func(free_choice);
   s->personal = g_ptr_array_new_with_free_func(free_choice);
   s->cloud = g_ptr_array_new_with_free_func(free_choice);
@@ -146,6 +151,41 @@ static void append_commit(FcitxPinyin *s, const char *text) {
   g_free(s->commit);
   s->commit = joined;
 }
+/* A phrase assembled by confirming several segments (e.g. sheng + tu for
+ * 生图) is learned as one entry with its full pinyin once the composition
+ * completes, instead of only the per-segment pieces. */
+static void pending_reset(FcitxPinyin *s) {
+  g_free(s->pending_raw);
+  g_free(s->pending_text);
+  s->pending_raw = g_strdup("");
+  s->pending_text = g_strdup("");
+}
+static void pending_add(FcitxPinyin *s, const char *raw, const char *text) {
+  if (!raw || !*raw || !text || !*text)
+    return;
+  char *joined_raw = s->pending_raw && *s->pending_raw
+                         ? g_strconcat(s->pending_raw, raw, NULL)
+                         : g_strdup(raw);
+  char *joined_text = s->pending_text && *s->pending_text
+                          ? g_strconcat(s->pending_text, text, NULL)
+                          : g_strdup(text);
+  g_free(s->pending_raw);
+  g_free(s->pending_text);
+  s->pending_raw = joined_raw;
+  s->pending_text = joined_text;
+}
+static void pending_learn(FcitxPinyin *s, const char *raw, const char *text) {
+  if (s->pending_raw && *s->pending_raw) {
+    char *total_raw = g_strconcat(s->pending_raw, raw ? raw : "", NULL);
+    char *total_text = g_strconcat(s->pending_text, text ? text : "", NULL);
+    goPinyinLearn((char *)total_raw, total_text);
+    g_free(total_raw);
+    g_free(total_text);
+    pending_reset(s);
+  } else if (raw && *raw) {
+    goPinyinLearn((char *)raw, (char *)text);
+  }
+}
 
 static void render(FcitxPinyin *s) {
   RimeApi *api = pinyin_rime_api();
@@ -187,6 +227,7 @@ static void render(FcitxPinyin *s) {
 static void clear(FcitxPinyin *s) {
   if (s->rime)
     pinyin_rime_api()->clear_composition(s->rime);
+  pending_reset(s);
   render(s);
 }
 
@@ -196,8 +237,12 @@ static int collect_commit(FcitxPinyin *s, const char *before) {
   if (api && api->get_commit(s->rime, &commit)) {
     append_commit(s, commit.text);
     const char *remaining = api->get_input(s->rime);
-    if (before && *before && (!remaining || !*remaining))
-      goPinyinLearn((char *)before, commit.text);
+    if (before && *before && (!remaining || !*remaining)) {
+      pending_learn(s, before, commit.text);
+    } else if (before && *before) {
+      /* Rime confirmed a piece while more input follows. */
+      pending_add(s, before, commit.text);
+    }
     api->free_commit(&commit);
     return 1;
   }
@@ -253,6 +298,7 @@ static void commit_partial(FcitxPinyin *s) {
   append_commit(s, confirmed);
   api->set_input(s->rime, remaining);
   goPinyinLearn(prefix, confirmed);
+  pending_add(s, prefix, confirmed);
   g_free(remaining);
   g_free(prefix);
   g_free(confirmed);
@@ -272,7 +318,7 @@ static void choose(FcitxPinyin *s, int index) {
       commit_partial(s);
   } else {
     append_commit(s, c->text);
-    goPinyinLearn(before, c->text);
+    pending_learn(s, before, c->text);
     api->clear_composition(s->rime);
   }
   g_free(before);
@@ -286,6 +332,7 @@ static void toggle_mode(FcitxPinyin *s) {
   if (english && raw && *raw)
     append_commit(s, raw);
   api->clear_composition(s->rime);
+  pending_reset(s);
   pinyin_set_input_english(english);
   api->set_option(s->rime, "ascii_mode", english);
   render(s);

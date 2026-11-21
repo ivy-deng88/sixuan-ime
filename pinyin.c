@@ -23,6 +23,7 @@ typedef struct {
   guint shift_held, modifiers;
   int shift_alone;
   char *raw, *preedit;
+  char *pending_raw, *pending_text;
   int caret;
   GPtrArray *local, *personal, *cloud, *merged;
 } PinyinEngine;
@@ -260,9 +261,45 @@ static void render(PinyinEngine *e) {
   show(e);
   trace_event(e,"render","none",-1);
 }
+/* A phrase assembled by confirming several segments (e.g. sheng + tu for
+ * 生图) is learned as one entry with its full pinyin once the composition
+ * completes, instead of only the per-segment pieces. */
+static void pending_reset(PinyinEngine *e) {
+  g_free(e->pending_raw);
+  g_free(e->pending_text);
+  e->pending_raw = g_strdup("");
+  e->pending_text = g_strdup("");
+}
+static void pending_add(PinyinEngine *e, const char *raw, const char *text) {
+  if (!raw || !*raw || !text || !*text)
+    return;
+  char *joined_raw = e->pending_raw && *e->pending_raw
+                         ? g_strconcat(e->pending_raw, raw, NULL)
+                         : g_strdup(raw);
+  char *joined_text = e->pending_text && *e->pending_text
+                          ? g_strconcat(e->pending_text, text, NULL)
+                          : g_strdup(text);
+  g_free(e->pending_raw);
+  g_free(e->pending_text);
+  e->pending_raw = joined_raw;
+  e->pending_text = joined_text;
+}
+static void pending_learn(PinyinEngine *e, const char *raw, const char *text) {
+  if (e->pending_raw && *e->pending_raw) {
+    char *total_raw = g_strconcat(e->pending_raw, raw ? raw : "", NULL);
+    char *total_text = g_strconcat(e->pending_text, text ? text : "", NULL);
+    goPinyinLearn((char *)total_raw, total_text);
+    g_free(total_raw);
+    g_free(total_text);
+    pending_reset(e);
+  } else if (raw && *raw) {
+    goPinyinLearn((char *)raw, (char *)text);
+  }
+}
 static void clear(PinyinEngine *e) {
   if (e->session)
     rime->clear_composition(e->session);
+  pending_reset(e);
   render(e);
 }
 static int collect_commit(PinyinEngine *e, const char *before) {
@@ -271,8 +308,12 @@ static int collect_commit(PinyinEngine *e, const char *before) {
     ibus_engine_commit_text(IBUS_ENGINE(e),
                             ibus_text_new_from_string(commit.text));
     const char *remaining = rime->get_input(e->session);
-    if (before && *before && (!remaining || !*remaining))
-      goPinyinLearn((char *)before, commit.text);
+    if (before && *before && (!remaining || !*remaining)) {
+      pending_learn(e, before, commit.text);
+    } else if (before && *before) {
+      /* Rime confirmed a piece while more input follows. */
+      pending_add(e, before, commit.text);
+    }
     rime->free_commit(&commit);
     return 1;
   }
@@ -326,6 +367,7 @@ static void commit_partial(PinyinEngine *e) {
   ibus_engine_commit_text(IBUS_ENGINE(e), ibus_text_new_from_string(confirmed));
   rime->set_input(e->session, remaining);
   goPinyinLearn(prefix, confirmed);
+  pending_add(e, prefix, confirmed);
   g_free(remaining);
   g_free(prefix);
   g_free(confirmed);
@@ -344,7 +386,7 @@ static void choose(PinyinEngine *e, int index) {
   } else {
     char *text = g_strdup(c->text);
     ibus_engine_commit_text(IBUS_ENGINE(e), ibus_text_new_from_string(text));
-    goPinyinLearn(before, text);
+    pending_learn(e, before, text);
     rime->clear_composition(e->session);
     g_free(text);
   }
@@ -362,6 +404,7 @@ static void toggle_input_mode(PinyinEngine *e) {
   if (english && raw && *raw)
     ibus_engine_commit_text(IBUS_ENGINE(e), ibus_text_new_from_string(raw));
   rime->clear_composition(e->session);
+  pending_reset(e);
   input_english = english;
   rime->set_option(e->session, "ascii_mode", english);
   render(e);
@@ -558,6 +601,8 @@ static void destroy(IBusObject *object) {
     g_hash_table_remove(engines, (gpointer)(uintptr_t)e->id);
   g_free(e->raw);
   g_free(e->preedit);
+  g_free(e->pending_raw);
+  g_free(e->pending_text);
   g_ptr_array_free(e->merged, TRUE);
   g_ptr_array_free(e->local, TRUE);
   g_ptr_array_free(e->personal, TRUE);
@@ -692,6 +737,8 @@ static void pinyin_engine_init(PinyinEngine *e) {
   e->merged = g_ptr_array_new();
   e->raw = g_strdup("");
   e->preedit = g_strdup("");
+  e->pending_raw = g_strdup("");
+  e->pending_text = g_strdup("");
 }
 uintptr_t native_pinyin_type(void) { return pinyin_engine_get_type(); }
 void native_pinyin_add(uint64_t id, uint64_t revision, const char *text,
