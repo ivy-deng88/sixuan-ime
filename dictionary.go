@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,7 +20,12 @@ type phrase struct {
 	Text   string `json:"text"`
 	Source string `json:"source"`
 	Weight int    `json:"weight"`
+	Last   int64  `json:"last,omitempty"`
 }
+
+// 近期使用加权：候选权重按 7 天半衰期衰减，常打的新词能追上权重更高
+// 但久未使用的旧词。
+const recencyHalfLifeDays = 7.0
 
 func readPrivateJSON(file string) ([]byte, error) {
 	f, e := os.Open(file)
@@ -88,7 +94,7 @@ func phraseCandidates(query string) []phrase {
 					for scanner.Scan() {
 						parts := strings.SplitN(scanner.Text(), "\t", 3)
 						if len(parts) >= 2 && !strings.HasPrefix(parts[0], "#") {
-							words = append(words, phrase{normalizePinyin(parts[0]), parts[1], "自定义", 1000})
+							words = append(words, phrase{Key: normalizePinyin(parts[0]), Text: parts[1], Source: "自定义", Weight: 1000})
 						}
 					}
 					f.Close()
@@ -97,9 +103,14 @@ func phraseCandidates(query string) []phrase {
 				json.Unmarshal(b, &words)
 			}
 			cached = cachedPhrases{modified: info.ModTime(), size: info.Size(), index: map[string][]phrase{}}
+			stamp := info.ModTime().Unix()
 			for _, word := range words {
 				word.Key = normalizePinyin(word.Key)
 				if validPhrase(word.Key, word.Text) {
+					// 旧数据没有时间戳：沿用文件修改时间，保持原有排序习惯。
+					if word.Last == 0 {
+						word.Last = stamp
+					}
 					cached.index[word.Key] = append(cached.index[word.Key], word)
 				}
 			}
@@ -112,7 +123,16 @@ func phraseCandidates(query string) []phrase {
 			}
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Weight > rows[j].Weight })
+	// 近期使用加权：权重按半衰期衰减，久未使用的词逐渐让位给新词。
+	now := time.Now().Unix()
+	score := func(p phrase) float64 {
+		days := float64(now-p.Last) / 86400
+		if days < 0 {
+			days = 0
+		}
+		return float64(p.Weight) * math.Pow(0.5, days/recencyHalfLifeDays)
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return score(rows[i]) > score(rows[j]) })
 	if len(rows) > 10 {
 		rows = rows[:10]
 	}
@@ -140,12 +160,13 @@ func learnWord(key, text string) error {
 	for i := range rows {
 		if rows[i].Key == key && rows[i].Text == text {
 			rows[i].Weight++
+			rows[i].Last = time.Now().Unix()
 			found = true
 			break
 		}
 	}
 	if !found {
-		rows = append(rows, phrase{key, text, "学习", 1})
+		rows = append(rows, phrase{key, text, "学习", 1, time.Now().Unix()})
 	}
 	if len(rows) > 50000 {
 		return errors.New("本地词条已达到上限")
